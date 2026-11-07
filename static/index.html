@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rua Segura</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    --primary: #0f766e; --primary-dark: #115e59; --bg: #f8fafc; --card: #ffffff;
+    --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
+    --aberto: #dc2626; --em_andamento: #d97706; --resolvido: #16a34a;
+    --ok-bg: #dcfce7; --ok-text: #166534; --err-bg: #fee2e2; --err-text: #991b1b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px;
+  }
+  header { background: var(--primary); color: #fff; padding: 10px 16px; }
+  header h1 { margin: 0; font-size: 1.2rem; }
+  header p { margin: 2px 0 0; font-size: .85rem; opacity: .9; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #map { flex: 1; }
+  aside { width: 370px; overflow-y: auto; background: var(--card); border-left: 1px solid var(--border); padding: 16px; }
+  h2 { margin: 0 0 8px; font-size: 1.1rem; }
+  h3 { margin: 24px 0 8px; font-size: .95rem; }
+  ol { margin: 0 0 12px; padding-left: 20px; color: var(--muted); font-size: .9rem; }
+  label { display: block; margin-top: 12px; font-weight: 600; font-size: .9rem; }
+  select, textarea, input[type=file] {
+    display: block; width: 100%; margin-top: 4px; padding: 8px; font: inherit; font-weight: 400;
+    border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text);
+  }
+  textarea { resize: vertical; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer;
+    background: var(--primary); color: #fff;
+  }
+  button:hover { background: var(--primary-dark); }
+  button:disabled { opacity: .6; cursor: wait; }
+  button.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); width: 100%; }
+  button.secondary:hover { background: #f0fdfa; }
+  button[type=submit] { width: 100%; margin-top: 16px; }
+  .muted { color: var(--muted); font-weight: 400; }
+  .hint { margin: 4px 0 0; font-size: .8rem; color: var(--muted); }
+  .pos { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px dashed var(--border); font-size: .85rem; }
+  .pos.set { border-style: solid; border-color: var(--primary); color: var(--primary-dark); }
+  #preview { display: block; max-width: 100%; max-height: 180px; margin-top: 8px; border-radius: 8px; }
+  #msg { margin-top: 12px; padding: 10px; border-radius: 8px; font-size: .9rem; }
+  #msg:empty { display: none; }
+  #msg.ok { background: var(--ok-bg); color: var(--ok-text); }
+  #msg.err { background: var(--err-bg); color: var(--err-text); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .85rem; }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  footer { margin-top: 24px; font-size: .8rem; color: var(--muted); }
+  footer a { color: var(--primary); }
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    main { display: block; }
+    #map { height: 55vh; }
+    aside { width: auto; border-left: 0; border-top: 1px solid var(--border); overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rua Segura</h1>
+  <p>Sinalize buracos, semáforos queimados e outros obstáculos para a prefeitura.</p>
+</header>
+<main>
+  <div id="map" aria-label="Mapa da cidade"></div>
+  <aside>
+    <h2>Nova ocorrência</h2>
+    <ol>
+      <li>Clique no mapa onde está o problema (você pode arrastar o marcador).</li>
+      <li>Escolha o tipo, adicione detalhes e envie.</li>
+    </ol>
+    <button id="locate" type="button" class="secondary">Usar minha localização</button>
+
+    <form id="form" novalidate>
+      <div id="pos" class="pos">Nenhum local selecionado no mapa.</div>
+
+      <label for="category">Tipo de problema</label>
+      <select id="category" required></select>
+
+      <label for="location_type">Onde</label>
+      <select id="location_type" required></select>
+
+      <label for="description">Descrição <span class="muted">(opcional)</span></label>
+      <textarea id="description" rows="3" placeholder="Ex.: buraco grande na faixa da direita, em frente ao nº 120"></textarea>
+      <p class="hint">Não inclua dados pessoais (nomes, telefones, placas de veículos).</p>
+
+      <label for="photo">Foto <span class="muted">(opcional)</span></label>
+      <input id="photo" type="file" accept="image/*">
+      <p class="hint">A foto é reduzida e os metadados (como GPS do aparelho) são removidos antes do envio.</p>
+      <img id="preview" hidden alt="Pré-visualização da foto">
+
+      <button type="submit" id="submit">Enviar ocorrência</button>
+      <div id="msg" role="status" aria-live="polite"></div>
+    </form>
+
+    <h3>Ocorrências no mapa</h3>
+    <div class="legend" id="legend"></div>
+
+    <footer>Você não precisa se identificar. É funcionário da prefeitura? <a href="/admin">Acesse o painel</a>.</footer>
+  </aside>
+</main>
+
+<script>
+const STATUS_COLORS = { aberto: '#dc2626', em_andamento: '#d97706', resolvido: '#16a34a' };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+let config, map, reportsLayer, draftMarker = null, photoDataUrl = null;
+
+function showMsg(text, kind) {
+  const el = $('msg');
+  el.textContent = text;
+  el.className = kind || '';
+}
+
+function fillSelect(select, options, placeholder) {
+  select.innerHTML = '';
+  if (placeholder) select.add(new Option(placeholder, ''));
+  for (const [value, label] of Object.entries(options)) select.add(new Option(label, value));
+}
+
+function setDraft(latlng) {
+  if (!draftMarker) {
+    draftMarker = L.marker(latlng, { draggable: true, title: 'Local do problema' }).addTo(map);
+    draftMarker.on('dragend', () => updatePos());
+  } else {
+    draftMarker.setLatLng(latlng);
+  }
+  updatePos();
+}
+
+function updatePos() {
+  const el = $('pos');
+  if (!draftMarker) {
+    el.textContent = 'Nenhum local selecionado no mapa.';
+    el.classList.remove('set');
+    return;
+  }
+  const { lat, lng } = draftMarker.getLatLng();
+  el.textContent = `Local selecionado: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  el.classList.add('set');
+}
+
+async function loadReports() {
+  try {
+    const res = await fetch('/api/reports');
+    if (!res.ok) throw new Error();
+    const reports = await res.json();
+    reportsLayer.clearLayers();
+    for (const r of reports) {
+      L.circleMarker([r.lat, r.lng], {
+        radius: 8, weight: 2, color: '#fff', fillColor: STATUS_COLORS[r.status] || '#64748b', fillOpacity: 0.9,
+      })
+        .bindPopup(
+          `<strong>${esc(config.categories[r.category] || r.category)}</strong><br>` +
+          `${esc(config.location_types[r.location_type] || r.location_type)} · ${esc(config.statuses[r.status] || r.status)}<br>` +
+          `<small>Registrado em ${esc(fmtDate(r.created_at))}</small>`
+        )
+        .addTo(reportsLayer);
+    }
+  } catch {
+    showMsg('Não foi possível carregar as ocorrências existentes.', 'err');
+  }
+}
+
+// Reduz a foto e re-codifica em JPEG. Desenhar no canvas descarta os metadados EXIF (incluindo GPS).
+async function resizeImage(file, maxSide = 1280, quality = 0.75) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+async function init() {
+  try {
+    config = await (await fetch('/api/config')).json();
+  } catch {
+    showMsg('Não foi possível conectar ao servidor.', 'err');
+    return;
+  }
+
+  fillSelect($('category'), config.categories, 'Selecione...');
+  fillSelect($('location_type'), config.location_types, 'Selecione...');
+  $('description').maxLength = config.max_description;
+
+  $('legend').innerHTML = Object.entries(config.statuses)
+    .map(([k, label]) => `<span><span class="dot" style="background:${STATUS_COLORS[k]}"></span>${esc(label)}</span>`)
+    .join('');
+
+  map = L.map('map').setView(config.map_center, config.map_zoom);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(map);
+  reportsLayer = L.layerGroup().addTo(map);
+  map.on('click', (e) => setDraft(e.latlng));
+
+  $('locate').addEventListener('click', () => {
+    if (!navigator.geolocation) return showMsg('Seu navegador não permite obter a localização.', 'err');
+    $('locate').disabled = true;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        $('locate').disabled = false;
+        const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+        map.setView(latlng, 17);
+        setDraft(latlng);
+        showMsg('');
+      },
+      () => {
+        $('locate').disabled = false;
+        showMsg('Não foi possível obter sua localização. Clique no mapa para marcar o local.', 'err');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+
+  $('photo').addEventListener('change', async () => {
+    const file = $('photo').files[0];
+    photoDataUrl = null;
+    $('preview').hidden = true;
+    if (!file) return;
+    try {
+      photoDataUrl = await resizeImage(file);
+      $('preview').src = photoDataUrl;
+      $('preview').hidden = false;
+    } catch {
+      $('photo').value = '';
+      showMsg('Não foi possível ler essa imagem. Tente outra foto.', 'err');
+    }
+  });
+
+  $('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!draftMarker) return showMsg('Clique no mapa para marcar o local do problema.', 'err');
+    if (!$('category').value) return showMsg('Escolha o tipo de problema.', 'err');
+    if (!$('location_type').value) return showMsg('Escolha onde está o problema.', 'err');
+
+    const { lat, lng } = draftMarker.getLatLng();
+    const payload = {
+      category: $('category').value,
+      location_type: $('location_type').value,
+      description: $('description').value.trim(),
+      lat, lng,
+      photo: photoDataUrl,
+    };
+
+    $('submit').disabled = true;
+    showMsg('Enviando...');
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar.');
+
+      showMsg(`Obrigado! Ocorrência nº ${data.id} enviada para a prefeitura.`, 'ok');
+      $('form').reset();
+      photoDataUrl = null;
+      $('preview').hidden = true;
+      map.removeLayer(draftMarker);
+      draftMarker = null;
+      updatePos();
+      loadReports();
+    } catch (err) {
+      showMsg(err.message || 'Erro ao enviar. Tente novamente.', 'err');
+    } finally {
+      $('submit').disabled = false;
+    }
+  });
+
+  loadReports();
+}
+
+init();
+</script>
+</body>
+</html>

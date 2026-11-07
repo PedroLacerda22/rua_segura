@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Painel da Prefeitura</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    --primary: #1e3a8a; --primary-dark: #172554; --bg: #f8fafc; --card: #ffffff;
+    --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
+    --err-bg: #fee2e2; --err-text: #991b1b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px;
+  }
+  header { background: var(--primary); color: #fff; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.15rem; }
+  header .actions { display: flex; gap: 8px; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer;
+    background: var(--primary); color: #fff;
+  }
+  button:hover { background: var(--primary-dark); }
+  button:disabled { opacity: .6; cursor: wait; }
+  button.light { background: #fff; color: var(--primary); }
+  button.light:hover { background: #e0e7ff; }
+  button.ghost { background: transparent; color: var(--primary); border: 1px solid var(--border); padding: 6px 10px; font-weight: 500; }
+  button.ghost:hover, .link-btn:hover { background: var(--bg); }
+  .link-btn { color: var(--primary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; text-decoration: none; font-size: inherit; }
+  select, textarea, input {
+    font: inherit; padding: 7px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text);
+  }
+
+  #login { margin: 60px auto; width: min(360px, calc(100% - 32px)); background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  #login h2 { margin: 0 0 4px; font-size: 1.1rem; }
+  #login p { margin: 0 0 16px; color: var(--muted); font-size: .9rem; }
+  #login input { width: 100%; margin-bottom: 12px; }
+  #login button { width: 100%; }
+  .error { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--err-bg); color: var(--err-text); font-size: .9rem; }
+  .error:empty { display: none; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #map { flex: 1; }
+  aside { width: 440px; display: flex; flex-direction: column; background: var(--card); border-left: 1px solid var(--border); min-height: 0; }
+  .toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  .stat { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+  .stat b { display: block; font-size: 1.3rem; }
+  .stat span { font-size: .78rem; color: var(--muted); }
+  .filters { display: flex; gap: 8px; }
+  .filters select { flex: 1; min-width: 0; }
+  #list { overflow-y: auto; padding: 12px 16px; flex: 1; }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+
+  .card { border: 1px solid var(--border); border-left-width: 5px; border-radius: 10px; padding: 12px; margin-bottom: 12px; transition: box-shadow .2s; }
+  .card.highlight { box-shadow: 0 0 0 3px #93c5fd; }
+  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .card h3 { margin: 0; font-size: .98rem; }
+  .card .meta { font-size: .8rem; color: var(--muted); margin: 2px 0 8px; }
+  .card .desc { margin: 0 0 10px; font-size: .9rem; white-space: pre-wrap; word-break: break-word; }
+  .card .desc.none { color: var(--muted); font-style: italic; }
+  .badge { font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: #fff; white-space: nowrap; }
+  .card .edit { display: grid; gap: 6px; }
+  .card textarea { width: 100%; resize: vertical; min-height: 40px; }
+  .card .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .card .saved { font-size: .8rem; color: #166534; }
+
+  dialog { border: 0; border-radius: 12px; padding: 12px; max-width: min(92vw, 900px); }
+  dialog::backdrop { background: rgba(15, 23, 42, .6); }
+  dialog img { display: block; max-width: 100%; max-height: 75vh; border-radius: 8px; }
+  dialog .row { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+  @media (max-width: 860px) {
+    html, body { height: auto; }
+    main { display: block; }
+    #map { height: 45vh; }
+    aside { width: auto; border-left: 0; }
+    #list { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rua Segura · Painel da Prefeitura</h1>
+  <div class="actions" id="actions" hidden>
+    <button class="light" id="refresh" type="button">Atualizar</button>
+    <button class="light" id="export" type="button">Exportar CSV</button>
+    <button class="light" id="logout" type="button">Sair</button>
+  </div>
+</header>
+
+<form id="login">
+  <h2>Acesso restrito</h2>
+  <p>Informe o PIN da equipe da prefeitura.</p>
+  <input id="pin" type="password" autocomplete="current-password" placeholder="PIN" required>
+  <button type="submit">Entrar</button>
+  <div class="error" id="loginError" role="alert"></div>
+</form>
+
+<main id="app" hidden>
+  <div id="map" aria-label="Mapa das ocorrências"></div>
+  <aside>
+    <div class="toolbar">
+      <div class="stats" id="stats"></div>
+      <div class="filters">
+        <select id="filterStatus" aria-label="Filtrar por status"></select>
+        <select id="filterCategory" aria-label="Filtrar por tipo"></select>
+      </div>
+    </div>
+    <div id="list"></div>
+  </aside>
+</main>
+
+<dialog id="photoDialog">
+  <img id="photoImg" alt="Foto enviada pelo cidadão">
+  <div class="row"><button type="button" id="closePhoto">Fechar</button></div>
+</dialog>
+
+<script>
+const STATUS_COLORS = { aberto: '#dc2626', em_andamento: '#d97706', resolvido: '#16a34a' };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+// O PIN fica só na aba atual (sessionStorage) e é apagado ao clicar em "Sair" ou fechar a aba.
+const store = {
+  get() { try { return sessionStorage.getItem('adminPin') || ''; } catch { return ''; } },
+  set(v) { try { sessionStorage.setItem('adminPin', v); } catch {} },
+  clear() { try { sessionStorage.removeItem('adminPin'); } catch {} },
+};
+
+let pin = store.get();
+let config, map, markersLayer, reports = [];
+const markers = new Map();
+let photoUrl = null;
+
+class AuthError extends Error {}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, { ...options, headers: { ...(options.headers || {}), 'X-Admin-Pin': pin } });
+  if (res.status === 401) throw new AuthError('PIN inválido.');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Erro na comunicação com o servidor.');
+  }
+  return res;
+}
+
+function logout(message = '') {
+  pin = '';
+  store.clear();
+  $('app').hidden = true;
+  $('actions').hidden = true;
+  $('login').hidden = false;
+  $('loginError').textContent = message;
+  $('pin').value = '';
+  $('pin').focus();
+}
+
+function handleError(err) {
+  if (err instanceof AuthError) logout('Sessão expirada ou PIN inválido.');
+  else alert(err.message);
+}
+
+async function loadReports() {
+  try {
+    reports = await (await api('/api/admin/reports')).json();
+    render();
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+function render() {
+  // Contadores
+  const counts = Object.fromEntries(Object.keys(config.statuses).map((k) => [k, 0]));
+  for (const r of reports) counts[r.status] = (counts[r.status] || 0) + 1;
+  $('stats').innerHTML = Object.entries(config.statuses).map(([k, label]) =>
+    `<div class="stat" style="border-top:3px solid ${STATUS_COLORS[k]}"><b>${counts[k] || 0}</b><span>${esc(label)}</span></div>`
+  ).join('');
+
+  // Filtros
+  const fs = $('filterStatus').value, fc = $('filterCategory').value;
+  const visible = reports.filter((r) => (!fs || r.status === fs) && (!fc || r.category === fc));
+
+  // Mapa
+  markersLayer.clearLayers();
+  markers.clear();
+  for (const r of visible) {
+    const m = L.circleMarker([r.lat, r.lng], {
+      radius: 9, weight: 2, color: '#fff', fillColor: STATUS_COLORS[r.status] || '#64748b', fillOpacity: 0.95,
+    }).bindPopup(`<strong>#${r.id} · ${esc(config.categories[r.category] || r.category)}</strong><br>${esc(config.statuses[r.status] || r.status)}`);
+    m.on('click', () => highlightCard(r.id));
+    m.addTo(markersLayer);
+    markers.set(r.id, m);
+  }
+
+  // Lista
+  const list = $('list');
+  if (!visible.length) {
+    list.innerHTML = `<div class="empty">${reports.length ? 'Nenhuma ocorrência com esses filtros.' : 'Nenhuma ocorrência registrada ainda.'}</div>`;
+    return;
+  }
+  list.innerHTML = visible.map((r) => {
+    const statusOptions = Object.entries(config.statuses)
+      .map(([k, label]) => `<option value="${esc(k)}"${k === r.status ? ' selected' : ''}>${esc(label)}</option>`).join('');
+    const osm = `https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lng}#map=19/${r.lat}/${r.lng}`;
+    return `
+      <article class="card" id="card-${r.id}" style="border-left-color:${STATUS_COLORS[r.status] || '#64748b'}">
+        <div class="top">
+          <h3>#${r.id} · ${esc(config.categories[r.category] || r.category)}</h3>
+          <span class="badge" style="background:${STATUS_COLORS[r.status] || '#64748b'}">${esc(config.statuses[r.status] || r.status)}</span>
+        </div>
+        <div class="meta">${esc(config.location_types[r.location_type] || r.location_type)} · registrado em ${esc(fmtDate(r.created_at))}
+          ${r.updated_at !== r.created_at ? ` · atualizado em ${esc(fmtDate(r.updated_at))}` : ''}</div>
+        <p class="desc${r.description ? '' : ' none'}">${r.description ? esc(r.description) : 'Sem descrição.'}</p>
+        <div class="edit">
+          <select data-field="status" aria-label="Status">${statusOptions}</select>
+          <textarea data-field="note" maxlength="1000" placeholder="Observação interna (ex.: equipe enviada, previsão de reparo)">${esc(r.staff_note)}</textarea>
+          <div class="row">
+            <button type="button" data-action="save" data-id="${r.id}">Salvar</button>
+            <button type="button" class="ghost" data-action="focus" data-id="${r.id}">Ver no mapa</button>
+            ${r.has_photo ? `<button type="button" class="ghost" data-action="photo" data-id="${r.id}">Ver foto</button>` : ''}
+            <a class="link-btn" href="${esc(osm)}" target="_blank" rel="noopener noreferrer">Abrir no OpenStreetMap</a>
+            <span class="saved" data-saved></span>
+          </div>
+        </div>
+      </article>`;
+  }).join('');
+}
+
+function highlightCard(id) {
+  const card = $(`card-${id}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.add('highlight');
+  setTimeout(() => card.classList.remove('highlight'), 1500);
+}
+
+async function saveReport(id, button) {
+  const card = $(`card-${id}`);
+  const status = card.querySelector('[data-field=status]').value;
+  const staff_note = card.querySelector('[data-field=note]').value;
+  button.disabled = true;
+  try {
+    await api(`/api/admin/reports/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, staff_note }),
+    });
+    await loadReports();
+    const saved = $(`card-${id}`)?.querySelector('[data-saved]');
+    if (saved) saved.textContent = 'Salvo ✓';
+  } catch (err) {
+    handleError(err);
+    button.disabled = false;
+  }
+}
+
+async function showPhoto(id) {
+  try {
+    const blob = await (await api(`/api/admin/reports/${id}/photo`)).blob();
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    photoUrl = URL.createObjectURL(blob);
+    $('photoImg').src = photoUrl;
+    $('photoDialog').showModal();
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+async function exportCsv() {
+  try {
+    const blob = await (await api('/api/admin/export.csv')).blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ocorrencias_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+function startApp() {
+  $('login').hidden = true;
+  $('app').hidden = false;
+  $('actions').hidden = false;
+  if (!map) {
+    map = L.map('map').setView(config.map_center, config.map_zoom);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
+  } else {
+    map.invalidateSize();
+  }
+  loadReports();
+}
+
+async function init() {
+  try {
+    config = await (await fetch('/api/config')).json();
+  } catch {
+    $('loginError').textContent = 'Não foi possível conectar ao servidor.';
+    return;
+  }
+
+  $('filterStatus').add(new Option('Todos os status', ''));
+  for (const [k, label] of Object.entries(config.statuses)) $('filterStatus').add(new Option(label, k));
+  $('filterCategory').add(new Option('Todos os tipos', ''));
+  for (const [k, label] of Object.entries(config.categories)) $('filterCategory').add(new Option(label, k));
+  $('filterStatus').addEventListener('change', render);
+  $('filterCategory').addEventListener('change', render);
+
+  $('login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    pin = $('pin').value.trim();
+    if (!pin) return;
+    try {
+      await api('/api/admin/reports');
+      store.set(pin);
+      $('loginError').textContent = '';
+      startApp();
+    } catch (err) {
+      $('loginError').textContent = err instanceof AuthError ? 'PIN incorreto.' : err.message;
+    }
+  });
+
+  $('list').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    if (btn.dataset.action === 'save') saveReport(id, btn);
+    if (btn.dataset.action === 'photo') showPhoto(id);
+    if (btn.dataset.action === 'focus') {
+      const m = markers.get(id);
+      if (m) { map.setView(m.getLatLng(), 17); m.openPopup(); }
+    }
+  });
+
+  $('refresh').addEventListener('click', loadReports);
+  $('export').addEventListener('click', exportCsv);
+  $('logout').addEventListener('click', () => logout());
+  $('closePhoto').addEventListener('click', () => $('photoDialog').close());
+
+  if (pin) startApp();
+  else $('pin').focus();
+}
+
+init();
+</script>
+</body>
+</html>

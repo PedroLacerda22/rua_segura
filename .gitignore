@@ -1,0 +1,17 @@
+# Banco de dados local: contém ocorrências e fotos enviadas por usuários (não versionar)
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.pyc
+
+# Ambiente / segredos
+.env
+.venv/
+venv/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
